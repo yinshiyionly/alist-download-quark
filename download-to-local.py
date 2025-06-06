@@ -179,14 +179,35 @@ class Downloader:
         if file_path.startswith(REMOVE_PREFIX):
             file_path = file_path[len(REMOVE_PREFIX):]
 
-        # 获取文件扩展名
-        file_ext = os.path.splitext(file_path)[1]
+        # 处理文件路径中的特殊字符
+        # 1. 移除路径中的引号（单引号和双引号）
+        file_path = file_path.replace("'", "").replace('"', "")
+        # 2. 处理文件路径，保留原始文件名
+        file_path = file_path.lstrip('/')
         
         # 构建目标路径
-        full_path = os.path.join(OUT_PATH, file_path.lstrip('/'))
+        full_path = os.path.join(OUT_PATH, file_path)
         target_dir = os.path.dirname(full_path)
         final_filename = os.path.basename(full_path)
-        temp_filename = f"{os.path.splitext(final_filename)[0]}.downloading"
+        
+        # 处理文件名中的特殊字符
+        # 1. 移除文件名开头和结尾的空格
+        final_filename = final_filename.strip()
+        # 2. 替换文件名中的连续空格为单个空格
+        final_filename = ' '.join(final_filename.split())
+        # 3. 移除或替换可能导致问题的特殊字符
+        final_filename = ''.join(c for c in final_filename if c.isprintable() and c not in '<>:"/\\|?*')
+        
+        # 如果文件名为空，使用时间戳作为文件名
+        if not final_filename:
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            file_ext = os.path.splitext(file_path)[1] or '.unknown'
+            final_filename = f"file_{timestamp}{file_ext}"
+            
+        # 创建临时文件名（使用原始文件名的 base 部分）
+        base_name = os.path.splitext(final_filename)[0]
+        file_ext = os.path.splitext(final_filename)[1]
+        temp_filename = f"{base_name}.downloading{file_ext}"
 
         return target_dir, temp_filename, final_filename
 
