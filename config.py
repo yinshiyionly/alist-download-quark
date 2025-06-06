@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     BATCH_SIZE: int
     # 每次循环后休眠时间(秒)
     SLEEP_TIME: int
+    # 下载成功后删除
+    DELETE_AFTER_DOWNLOAD: bool
 
     # MySQL配置
     MYSQL_HOST: str  # MySQL主机地址

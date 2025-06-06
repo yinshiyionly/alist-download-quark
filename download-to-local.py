@@ -28,7 +28,7 @@ MYSQL_CONFIG = {
 # 下载配置
 BATCH_SIZE = int(settings.BATCH_SIZE)  # 每次处理的文件数量
 SLEEP_TIME = int(settings.SLEEP_TIME)  # 每次循环后休眠时间(秒)
-DELETE_AFTER_DOWNLOAD = True  # 下载成功后是否删除文件
+DELETE_AFTER_DOWNLOAD = settings.DELETE_AFTER_DOWNLOAD  # 下载成功后是否删除文件
 MIN_DISK_SPACE = int(settings.DISK_FREE)  # 最小磁盘空间要求(10GB)
 REMOVE_PREFIX = settings.GET_ROOT_DIR  # 需要移除的路径前缀
 OUT_PATH = settings.VIDEO_TMP_DIR  # 下载文件的根目录
