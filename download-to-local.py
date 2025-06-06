@@ -49,18 +49,78 @@ class DatabaseError(Exception):
 def check_disk_space(path: str, required_space: int = MIN_DISK_SPACE) -> bool:
     """检查磁盘空间是否足够"""
     try:
-        total, used, free = shutil.disk_usage(path)
+        # 首先检查路径是否存在
+        if not os.path.exists(path):
+            logger.error("检查磁盘空间失败：路径不存在", extra={"path": path})
+            return False
+
+        # 检查路径是否可访问
+        if not os.access(path, os.R_OK):
+            logger.error("检查磁盘空间失败：无权限访问路径", extra={"path": path})
+            return False
+
+        # 获取路径的绝对路径
+        abs_path = os.path.abspath(path)
+        logger.info("检查路径", extra={"path": abs_path})
+
+        # 获取磁盘使用情况
+        total, used, free = shutil.disk_usage(abs_path)
+        
+        # 转换为GB进行记录
+        total_gb = total / (1024 ** 3)
+        used_gb = used / (1024 ** 3)
+        free_gb = free / (1024 ** 3)
+        required_gb = required_space / (1024 ** 3)
+        
         logger.info(
-            "检查磁盘空间", 
+            "磁盘空间信息", 
             extra={
-                "total_gb": f"{total/1024/1024/1024:.2f}GB",
-                "used_gb": f"{used/1024/1024/1024:.2f}GB",
-                "free_gb": f"{free/1024/1024/1024:.2f}GB"
+                "path": abs_path,
+                "total_gb": f"{total_gb:.2f}GB",
+                "used_gb": f"{used_gb:.2f}GB",
+                "free_gb": f"{free_gb:.2f}GB",
+                "required_gb": f"{required_gb:.2f}GB"
             }
         )
-        return free > required_space
+
+        if free <= required_space:
+            logger.warning(
+                "磁盘空间不足", 
+                extra={
+                    "path": abs_path,
+                    "free_gb": f"{free_gb:.2f}GB",
+                    "required_gb": f"{required_gb:.2f}GB"
+                }
+            )
+            return False
+
+        return True
+
+    except PermissionError as e:
+        logger.error("检查磁盘空间失败：权限不足", extra={
+            "path": path,
+            "error": str(e)
+        })
+        return False
+    except FileNotFoundError as e:
+        logger.error("检查磁盘空间失败：路径不存在", extra={
+            "path": path,
+            "error": str(e)
+        })
+        return False
+    except OSError as e:
+        logger.error("检查磁盘空间失败：系统错误", extra={
+            "path": path,
+            "error": str(e),
+            "error_code": e.errno if hasattr(e, 'errno') else 'unknown'
+        })
+        return False
     except Exception as e:
-        logger.error(f"检查磁盘空间失败", extra={"error": str(e)})
+        logger.error("检查磁盘空间失败：未知错误", extra={
+            "path": path,
+            "error": str(e),
+            "error_type": type(e).__name__
+        })
         return False
 
 def ensure_directory(path: str) -> bool:
@@ -149,7 +209,7 @@ class Database:
             async with self.pool.acquire() as conn:
                 async with conn.cursor(aiomysql.DictCursor) as cur:
                     await cur.execute('''
-                        SELECT id, path, sign 
+                        SELECT id, path, sign, size 
                         FROM files 
                         WHERE is_processed = 0 
                         LIMIT %s
@@ -247,7 +307,7 @@ class Downloader:
             logger.error("获取文件大小失败", extra={"error": str(e)})
         return None
 
-    async def download_file(self, file_path: str, sign: str) -> bool:
+    async def download_file(self, file_path: str, sign: str, file_size: int) -> bool:
         """
         下载文件
         返回: 是否下载成功
@@ -268,18 +328,9 @@ class Downloader:
         # 构建下载URL
         download_url = f"{settings.DOWNLOAD_HOST}{file_path}?sign={sign}"
         
-        # 获取远程文件大小
-        remote_size = None
-        try:
-            async with self.session.head(download_url) as response:
-                if response.status == 200:
-                    remote_size = int(response.headers.get('Content-Length', 0))
-        except Exception as e:
-            logger.error("获取文件大小失败", extra={"error": str(e)})
-        
-        # 如果获取到了文件大小，检查磁盘空间
-        if remote_size and not check_disk_space(target_dir, remote_size):
-            logger.error("磁盘空间不足", extra={"path": file_path, "size": remote_size})
+        # 检查磁盘空间是否足够
+        if not check_disk_space(target_dir, file_size):
+            logger.error("磁盘空间不足", extra={"path": file_path, "size": file_size})
             return False
 
         retries = 0
@@ -303,6 +354,10 @@ class Downloader:
                         async for chunk in response.content.iter_chunked(8192):
                             if chunk:
                                 f.write(chunk)
+
+                # 检查下载的文件大小是否正确
+                if os.path.getsize(temp_file_path) != file_size:
+                    raise DownloadError(f"文件大小不匹配，期望：{file_size}，实际：{os.path.getsize(temp_file_path)}")
 
                 # 下载完成后重命名文件
                 os.rename(temp_file_path, final_file_path)
@@ -329,7 +384,7 @@ class Downloader:
                 
                 # 检查临时文件是否完整
                 if os.path.exists(temp_file_path):
-                    if remote_size is None or os.path.getsize(temp_file_path) < remote_size:
+                    if os.path.getsize(temp_file_path) != file_size:
                         # 文件不完整，下次继续下载
                         continue
                     else:
@@ -357,7 +412,9 @@ class Downloader:
         return False
 
 async def main():
+    # 初始化数据库
     db = Database()
+    await db.init_db()
     
     try:
         # 无限循环，支持用户中断
@@ -387,7 +444,11 @@ async def main():
                         
                         for file in files:
                             try:
-                                success = await downloader.download_file(file['path'], file['sign'])
+                                success = await downloader.download_file(
+                                    file['path'], 
+                                    file['sign'],
+                                    file['size']  # 传入文件大小
+                                )
                                 if success:
                                     await db.update_file_status(file['id'], 1)
                                     logger.info("文件处理完成", extra={"path": file['path']})
