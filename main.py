@@ -79,19 +79,17 @@ class Database:
             async with conn.cursor() as cur:
                 # 获取文件名和目录路径
                 file_name = file_info['name']
-                modified_time = datetime.fromisoformat(file_info['modified'].replace('Z', '+00:00'))
                 
                 await cur.execute('''
                     INSERT INTO files (name, path, size, sign, is_processed)
-                    VALUES (%s, %s, %s, %s, %s, 0)
+                    VALUES (%s, %s, %s, %s, 0) AS new_values
                     ON DUPLICATE KEY UPDATE
-                    size = VALUES(size),
-                    sign = VALUES(sign)
+                    size = new_values.size,
+                    sign = new_values.sign
                 ''', (
                     file_name,
                     full_path,
                     file_info['size'],
-                    modified_time,
                     file_info['sign']
                 ))
                 await conn.commit()
