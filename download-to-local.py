@@ -31,9 +31,12 @@ SLEEP_TIME = int(settings.SLEEP_TIME)  # 每次循环后休眠时间(秒)
 DELETE_AFTER_DOWNLOAD = settings.DELETE_AFTER_DOWNLOAD  # 下载成功后是否删除文件
 MIN_DISK_SPACE = int(settings.DISK_FREE)  # 最小磁盘空间要求(10GB)
 REMOVE_PREFIX = settings.GET_ROOT_DIR  # 需要移除的路径前缀
-OUT_PATH = settings.VIDEO_TMP_DIR  # 下载文件的根目录
 MAX_DB_RETRIES = 3  # 数据库操作最大重试次数
 DB_RETRY_DELAY = 5  # 数据库重试延迟（秒）
+
+# 文件保存配置
+SAVE_ROOT_DIR = "/data"  # 文件保存根目录
+PRESERVE_PATH_STRUCTURE = True  # 是否保留原始路径结构
 
 class DownloadError(Exception):
     """下载错误的自定义异常"""
@@ -58,6 +61,15 @@ def check_disk_space(path: str, required_space: int = MIN_DISK_SPACE) -> bool:
         return free > required_space
     except Exception as e:
         logger.error(f"检查磁盘空间失败", extra={"error": str(e)})
+        return False
+
+def ensure_directory(path: str) -> bool:
+    """确保目录存在，如果不存在则创建"""
+    try:
+        os.makedirs(path, exist_ok=True)
+        return True
+    except Exception as e:
+        logger.error(f"创建目录失败", extra={"path": path, "error": str(e)})
         return False
 
 class Database:
@@ -169,6 +181,9 @@ class Database:
 class Downloader:
     def __init__(self, session: aiohttp.ClientSession):
         self.session = session
+        # 确保保存根目录存在
+        if not ensure_directory(SAVE_ROOT_DIR):
+            raise DownloadError(f"无法创建保存根目录: {SAVE_ROOT_DIR}")
 
     def _get_download_path(self, file_path: str) -> tuple[str, str, str]:
         """
@@ -185,8 +200,15 @@ class Downloader:
         # 2. 处理文件路径，保留原始文件名
         file_path = file_path.lstrip('/')
         
-        # 构建目标路径
-        full_path = os.path.join(OUT_PATH, file_path)
+        # 根据配置决定是否保留原始路径结构
+        if PRESERVE_PATH_STRUCTURE:
+            # 保留原始路径结构，但使用保存根目录
+            full_path = os.path.join(SAVE_ROOT_DIR, file_path)
+        else:
+            # 不保留路径结构，直接保存到根目录
+            final_filename = os.path.basename(file_path)
+            full_path = os.path.join(SAVE_ROOT_DIR, final_filename)
+        
         target_dir = os.path.dirname(full_path)
         final_filename = os.path.basename(full_path)
         
@@ -203,6 +225,10 @@ class Downloader:
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             file_ext = os.path.splitext(file_path)[1] or '.unknown'
             final_filename = f"file_{timestamp}{file_ext}"
+        
+        # 确保目标目录存在
+        if not ensure_directory(target_dir):
+            raise DownloadError(f"无法创建目标目录: {target_dir}")
             
         # 创建临时文件名（使用原始文件名的 base 部分）
         base_name = os.path.splitext(final_filename)[0]
@@ -341,7 +367,7 @@ async def main():
                 await db.ensure_connected()
                 
                 # 检查磁盘空间是否满足最低要求
-                if not check_disk_space(OUT_PATH):
+                if not check_disk_space(SAVE_ROOT_DIR):
                     logger.warning(f"磁盘空间不足{MIN_DISK_SPACE/1024/1024/1024:.2f}GB，休眠后重试")
                     await asyncio.sleep(SLEEP_TIME)
                     continue
