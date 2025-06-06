@@ -263,10 +263,14 @@ class Downloader:
         # 根据配置决定是否保留原始路径结构
         if PRESERVE_PATH_STRUCTURE:
             # 保留原始路径结构，但使用保存根目录
-            full_path = os.path.join(SAVE_ROOT_DIR, file_path)
+            # 替换路径中的空格
+            clean_path = file_path.replace(' ', '_')
+            full_path = os.path.join(SAVE_ROOT_DIR, clean_path)
         else:
             # 不保留路径结构，直接保存到根目录
             final_filename = os.path.basename(file_path)
+            # 替换文件名中的空格
+            final_filename = final_filename.replace(' ', '_')
             full_path = os.path.join(SAVE_ROOT_DIR, final_filename)
         
         target_dir = os.path.dirname(full_path)
@@ -275,8 +279,8 @@ class Downloader:
         # 处理文件名中的特殊字符
         # 1. 移除文件名开头和结尾的空格
         final_filename = final_filename.strip()
-        # 2. 替换文件名中的连续空格为单个空格
-        final_filename = ' '.join(final_filename.split())
+        # 2. 替换文件名中的所有空格为下划线
+        final_filename = final_filename.replace(' ', '_')
         # 3. 移除或替换可能导致问题的特殊字符
         final_filename = ''.join(c for c in final_filename if c.isprintable() and c not in '<>:"/\\|?*')
         
