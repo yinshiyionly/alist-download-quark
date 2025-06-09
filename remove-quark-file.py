@@ -128,27 +128,6 @@ class Database:
                     return [result[0] for result in results if result[0]]
         return await self.execute_with_retry(_operation)
 
-    async def update_files_status(self, dir_path: str, status: int, error_msg: str = None):
-        """更新指定目录下所有文件的处理状态"""
-        async def _operation():
-            async with self.pool.acquire() as conn:
-                async with conn.cursor() as cur:
-                    if error_msg:
-                        await cur.execute('''
-                            UPDATE files 
-                            SET is_processed = %s, error_message = %s, 
-                                updated_at = CURRENT_TIMESTAMP 
-                            WHERE path LIKE %s
-                        ''', (status, error_msg, f"{dir_path}/%"))
-                    else:
-                        await cur.execute('''
-                            UPDATE files 
-                            SET is_processed = %s, updated_at = CURRENT_TIMESTAMP 
-                            WHERE path LIKE %s
-                        ''', (status, f"{dir_path}/%"))
-                    await conn.commit()
-        await self.execute_with_retry(_operation)
-
 class QuarkRemover:
     def __init__(self, session: aiohttp.ClientSession):
         self.session = session
@@ -231,16 +210,8 @@ async def main():
                 for dir_path in directories:
                     try:
                         success = await remover.remove_directory(dir_path)
-                        if success:
-                            await db.update_files_status(dir_path, 1)
-                            logger.info("目录删除完成", extra={"dir_path": dir_path})
-                        else:
-                            error_msg = "删除失败"
-                            await db.update_files_status(dir_path, -1, error_msg)
-                            logger.error("目录删除失败", extra={"dir_path": dir_path, "error": error_msg})
                     except Exception as e:
                         logger.error("处理目录出错", extra={"dir_path": dir_path, "error": str(e)})
-                        await db.update_files_status(dir_path, -1, str(e))
                 
                 logger.info("所有目录删除完成")
 
