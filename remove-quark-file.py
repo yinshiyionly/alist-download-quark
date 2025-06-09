@@ -122,7 +122,7 @@ class Database:
                             ) as dir_path
                         FROM files 
                         WHERE path LIKE '/material/%'
-                        AND is_processed = 0
+                        AND is_processed = 1
                     ''')
                     results = await cur.fetchall()
                     return [result[0] for result in results if result[0]]
@@ -204,7 +204,6 @@ async def main():
 
                 logger.info("开始处理目录", extra={"count": len(directories)})
                 print(directories)
-                exit()
                 # 删除所有目录
                 logger.info("开始删除目录...")
                 for dir_path in directories:
