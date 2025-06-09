@@ -10,6 +10,7 @@ from pathlib import Path
 from datetime import datetime
 from config import settings
 from logger import Logger
+import urllib.parse
 
 # 初始化日志
 logger = Logger("downloader").logger
@@ -329,8 +330,10 @@ class Downloader:
             logger.info("文件已存在", extra={"path": final_file_path})
             return True
 
-        # 构建下载URL
-        download_url = f"{settings.DOWNLOAD_HOST}{file_path}?sign={sign}"
+        encoded_path = urllib.parse.quote(file_path)
+        # 构建最终下载链接
+        download_url = f"{settings.DOWNLOAD_HOST}{encoded_path}?sign={sign}"
+        print(download_url)
         
         # 检查磁盘空间是否足够
         if not check_disk_space(target_dir, file_size):
