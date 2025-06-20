@@ -242,6 +242,11 @@ class Database:
 class Downloader:
     def __init__(self, session: aiohttp.ClientSession):
         self.session = session
+        # 设置请求头
+        self.headers = {
+            "Authorization": settings.API_TOKEN,
+            "Content-Type": "application/json"
+        }
         # 确保保存根目录存在
         if not ensure_directory(SAVE_ROOT_DIR):
             raise DownloadError(f"无法创建保存根目录: {SAVE_ROOT_DIR}")
@@ -258,7 +263,7 @@ class Downloader:
                 "path": file_path
             }
             
-            async with self.session.post(url, json=payload) as response:
+            async with self.session.post(url, json=payload, headers=self.headers) as response:
                 if response.status != 200:
                     logger.error("获取文件信息失败", extra={
                         "path": file_path,
