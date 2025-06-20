@@ -263,34 +263,42 @@ class Downloader:
                 "path": file_path
             }
             
+            headers_info = {k: v for k, v in self.headers.items() if k != "Authorization"}
+            logger.info(f"开始请求文件流地址 - URL: {url}, 路径: {file_path}, 请求头: {headers_info}")
+            
             async with self.session.post(url, json=payload, headers=self.headers) as response:
+                response_text = await response.text()
                 if response.status != 200:
-                    logger.error("获取文件信息失败", extra={
-                        "path": file_path,
-                        "status": response.status
-                    })
+                    logger.error(f"获取文件信息失败 - 路径: {file_path}, 状态码: {response.status}, URL: {url}, 响应: {response_text}")
                     return None
                 
-                data = await response.json()
+                try:
+                    data = await response.json()
+                except Exception as e:
+                    logger.error(f"解析响应JSON失败 - 路径: {file_path}, 错误: {str(e)}, 响应: {response_text}")
+                    return None
+                
                 if data.get("code") != 200:
-                    logger.error("获取文件信息失败", extra={
-                        "path": file_path,
-                        "message": data.get("message")
-                    })
+                    logger.error(f"获取文件信息失败 - 路径: {file_path}, 消息: {data.get('message')}, 代码: {data.get('code')}, 响应: {data}")
                     return None
                 
                 raw_url = data.get("data", {}).get("raw_url")
                 if not raw_url:
-                    logger.error("文件流地址为空", extra={"path": file_path})
+                    logger.error(f"文件流地址为空 - 路径: {file_path}, 响应: {data}")
                     return None
                 
+                logger.info(f"成功获取文件流地址 - 路径: {file_path}, 状态码: {response.status}")
                 return raw_url
                 
         except Exception as e:
-            logger.error("获取文件流地址出错", extra={
+            error_info = {
                 "path": file_path,
-                "error": str(e)
-            })
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "url": url,
+                "headers": {k: v for k, v in self.headers.items() if k != "Authorization"}
+            }
+            logger.error(f"获取文件流地址出错 - {error_info}")
             return None
 
     def _get_download_path(self, file_path: str) -> tuple[str, str, str]:
