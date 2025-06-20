@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     GET_ROOT_DIR: str = "/"
     # 下载业务的host
     DOWNLOAD_HOST: str
+    GET_FILE_INFO_HOST: str
     # 每次处理的文件数量
     BATCH_SIZE: int = 5
     # 每次循环后休眠时间(秒)
