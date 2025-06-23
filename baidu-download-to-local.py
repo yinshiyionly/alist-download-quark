@@ -245,7 +245,8 @@ class Downloader:
         # 设置请求头
         self.headers = {
             "Authorization": settings.API_TOKEN,
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "User-Agent": "pan.baidu.com"
         }
         # 确保保存根目录存在
         if not ensure_directory(SAVE_ROOT_DIR):
@@ -403,7 +404,9 @@ class Downloader:
                 local_size = os.path.getsize(temp_file_path) if os.path.exists(temp_file_path) else 0
                 
                 # 设置断点续传的header
-                headers = {}
+                headers = {
+                    "User-Agent": "pan.baidu.com"
+                }
                 if local_size > 0:
                     headers['Range'] = f'bytes={local_size}-'
 
